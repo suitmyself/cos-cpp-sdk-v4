@@ -409,10 +409,13 @@ CURL *HttpSender::PrepareMultiFormDataCurl(const string &url,
     return file_curl;
 }
 
-//review: const string url ==> const string & url
-//        const std::map<string, string> user_headers ==> const std::map<string, string> & user_headers
-//        user_params 和 localFileName存在同一的问题
-//宁以const引用，而不是对象，传递参数，此处应为编码者大意漏掉了 &
+/*
+review: const string url ==> const string & url
+        const std::map<string, string> user_headers ==> const std::map<string, string> & user_headers
+        user_params 和 localFileName存在同一的问题
+宁以const引用，而不是对象，传递参数，此处应为编码者大意漏掉了 &
+*/
+    
 string HttpSender::SendFileParall(const string url,
                                   const std::map<string, string> user_headers,
                                   const std::map<string, string> user_params,
@@ -464,6 +467,7 @@ string HttpSender::SendFileParall(const string url,
         while(easy_handler_count < max_parall_num) {
             string offset_string = StringUtil::Uint64ToString(offset);
             slice_params["offset"] = offset_string;
+            //review: c style的强制类型转换
             fileInput.read((char *)sliceContentArr[easy_handler_count], sliceSize);
             // byte read len
             unsigned long byte_read_len = 0;
