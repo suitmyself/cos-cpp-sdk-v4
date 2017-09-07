@@ -110,7 +110,7 @@ string HttpSender::SendGetRequest(const string url,
 {
     /*
     review: 尽可能延后变量定义式出现的时间 & 以及避免不成熟的劣化。
-    同上，下面还有很多代码都存在相同的问题，不再重复。
+    同上，下面还有很多代码都存在相同的问题。
     */
     string user_params_str = "";
     string param_key = "";
@@ -176,6 +176,8 @@ string HttpSender::SendGetRequest(const string url,
 int HttpSender::SendGetRequest(string* pRsp, const string& url,
                 const std::map<string, string> &user_headers,
                 const std::map<string, string> &user_params) {
+    
+    //review: 尽可能延后变量定义式出现的时间 & 以及避免不成熟的劣化。同上。
     string user_params_str = "";
     string param_key = "";
     string param_value = "";
@@ -228,6 +230,12 @@ string HttpSender::SendJsonPostRequest(const string url,
     curl_slist* header_lists = SetCurlHeaders(json_post_curl, user_headers_cp);
 
     Json::Value param_json;
+    
+    /*
+    review: 尽量延迟变量的定义
+    for(auto it = user_params.begin(); it != user_params.end(); ++it)
+        param_json[it->first] = it->second;
+    */
     std::map<string, string>::const_iterator it = user_params.begin();
     for (; it != user_params.end(); ++it) {
         param_json[it->first] = it->second;
@@ -264,6 +272,8 @@ string HttpSender::SendJsonPostRequest(const string url,
     return response;
 }
 
+//review: const string url ==> const string & url
+//宁以const引用，而不是对象，传递参数，此处应为编码者大意漏掉了 &
 string HttpSender::SendJsonBodyPostRequest(const string url,const std::string& jsonBody,
                                        const std::map<string, string> &user_headers) {
     string response = "";
@@ -335,6 +345,8 @@ string HttpSender::SendSingleFilePostRequest(const string &url,
     if (ret_code != CURLE_OK) {
         SDK_LOG_ERR("sendSingleFilePost error! url: %s",url.c_str());
 #ifdef __USE_L5
+        //review: DRY原则，don't repead yourself原则
+        //下面的代码在很多函数中都是重复的，可以考虑抽取出来，作为一个第三方函数，然后在各处调用。
         int64_t l5_modid = CosSysConfig::getL5Modid();
         int64_t l5_cmdid = CosSysConfig::getL5Cmdid();
         L5EndpointProvider::UpdateRouterResult(url, l5_modid,l5_cmdid,
@@ -421,7 +433,7 @@ string HttpSender::SendFileParall(const string url,
     /*
     review: RAII 资源获取就是初始化，以对象管理资源，以及为异常安全而努力是值得的。
     下面的代码并没有遵循上面的原则，直接用new来创建数组，并且使用了指针数组。
-    但在后面的逻辑代码中，有可能“直接抛出异常而函数退出”，导致后面的 delete[] sliceContentArr[i]; 并没有执行，此时则发生了资源泄露。
+    但在后面的逻辑代码中，有可能“直接抛出异常而跳出函数”，导致后面的 delete[] sliceContentArr[i]; 并没有执行，此时则发生了资源泄露。
     解决办法是使用智能指针shared_ptr保证资源一定能够释放，或者在这里直接使用vector<vector<unsigned char>> 或者 vector<string>
     */
     for (unsigned int i = 0; i < max_parall_num; ++i) {
@@ -537,7 +549,8 @@ string HttpSender::SendFileParall(const string url,
                 if (!data_member["access_url"].isNull()) {
                     final_response = slice_response;
                 }
-
+                
+                //review: 如果上面的json_object["code"].asInt();执行抛出异常，则以下代码根本不会执行，资源泄露。
                 curl_multi_remove_handle(multi_curl, easy_handler_over);
                 curl_formfree(slice_firstitem);
                 curl_slist_free_all(slice_header_slist);
