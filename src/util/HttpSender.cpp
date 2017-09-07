@@ -309,6 +309,7 @@ string HttpSender::SendSingleFilePostRequest(const string &url,
                                              const unsigned char* fileContent,
                                              const unsigned int fileContent_len) {
 
+    //review: struct多余
     struct curl_httppost *firstitem = NULL;
     struct curl_slist *header_lists = NULL;
     string response = "";
@@ -325,6 +326,7 @@ string HttpSender::SendSingleFilePostRequest(const string &url,
     int64_t time_cost_in_us = GetTimeStampInUs() - start;
     time_cost_in_us = time_cost_in_us;
 
+    //review：异常安全问题，如果前面函数存在异常抛出，以下资源释放函数并不会执行，此时，仍然存在资源泄露问题。
     curl_formfree(firstitem);
     curl_slist_free_all(header_lists);
     curl_easy_cleanup(file_curl);
@@ -350,6 +352,11 @@ string HttpSender::SendSingleFilePostRequest(const string &url,
     return response;
 }
 
+/*
+review:除非指向NULL合法，否则使用“引用”进行参数传递优先于使用“指针进行参数传递”。
+代码中response对象使用string *，但函数中并未进行判空，如果传递的response == NULL，则会引发错误。
+而使用“引用”，很大程度上能够避免这个问题，因为引用需要初始化，除非特意为之，一般不会指向NULL。
+*/
 CURL *HttpSender::PrepareMultiFormDataCurl(const string &url,
                                            const std::map<string, string> &user_headers,
                                            const std::map<string, string> &user_params,
@@ -360,6 +367,7 @@ CURL *HttpSender::PrepareMultiFormDataCurl(const string &url,
                                            string *response) {
 
     struct curl_httppost *lastitem = NULL;
+    //review: 尽量延迟变量定义的时间 && 尽量避免不成熟的劣化, 同上。
     string param_key = "";
     string param_value = "";
     std::map<string, string>::const_iterator it = user_params.begin();
@@ -554,8 +562,7 @@ string HttpSender::SendFileParall(const string url,
 
 int64_t HttpSender::GetTimeStampInUs() {
     // 构造时间
-    //review: struct 多余，没必要使用 c style。
-    struct timeval tv;
+    struct timeval tv;     //review: struct 多余。
     gettimeofday(&tv, NULL);
     return tv.tv_sec * 1000000 + tv.tv_usec;
 }
