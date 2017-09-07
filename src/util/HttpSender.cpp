@@ -29,6 +29,14 @@ using std::size_t;
 
 namespace qcloud_cos {
 
+/*
+review:
+函数接口设计上可能存在缺陷： 
+void * 可以转换为其他任何类型的指针，使用void指针本质上屏蔽了C++的类型检查。
+函数的形参buffer其类型实际应为 char *, stream类型应为string & 为宜。
+如果传入参数实际上非为 char *, string，其行为未定义。
+此外建议使用C++ style的强制类型转换(static_cast, dynamic_cast, const_cast)，而不是C style的强制类型转换，代码存在两者混用情况。
+*/    
 size_t HttpSender::CurlWriter(void *buffer, size_t size, size_t count, void *stream) {
     string *pstream = static_cast<string *>(stream);
     (*pstream).append((char *)buffer, size * count);
@@ -38,8 +46,7 @@ size_t HttpSender::CurlWriter(void *buffer, size_t size, size_t count, void *str
 /*
  * 生成一个easy curl对象，并设置一些公共值
  */
-CURL *HttpSender::CurlEasyHandler(const string &url, string *rsp,
-                                  bool is_post) {
+CURL *HttpSender::CurlEasyHandler(const string &url, string *rsp, bool is_post) {
     CURL *easy_curl = curl_easy_init();
 
     uint64_t conn_timeout = CosSysConfig::getTimeoutInms();
