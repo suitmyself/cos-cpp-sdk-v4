@@ -28,7 +28,13 @@ using std::string;
 using std::size_t;
 
 namespace qcloud_cos {
-
+/*
+review: 函数接口设计上可能存在缺陷
+void * 可以转换为其他任何类型的指针，使用void指针本质上屏蔽了C++的类型检查。
+函数的形参buffer其类型实际应为 char *, stream类型应为string & 为宜。
+如果传入参数实际上非为 char *, string，其行为未定义。
+此外建议使用C++ style的强制类型转换(static_cast, dynamic_cast, const_cast)，而不是C style的强制类型转换，代码存在两者混用情况。
+*/   
 size_t HttpSender::CurlWriter(void *buffer, size_t size, size_t count, void *stream) {
     string *pstream = static_cast<string *>(stream);
     (*pstream).append((char *)buffer, size * count);
@@ -38,8 +44,7 @@ size_t HttpSender::CurlWriter(void *buffer, size_t size, size_t count, void *str
 /*
  * 生成一个easy curl对象，并设置一些公共值
  */
-CURL *HttpSender::CurlEasyHandler(const string &url, string *rsp,
-                                  bool is_post) {
+CURL *HttpSender::CurlEasyHandler(const string &url, string *rsp, bool is_post) {
     CURL *easy_curl = curl_easy_init();
 
     uint64_t conn_timeout = CosSysConfig::getTimeoutInms();
@@ -75,6 +80,18 @@ struct curl_slist* HttpSender::SetCurlHeaders(CURL *curl_handler, const std::map
     header_lists = curl_slist_append(header_lists, "Connection: Keep-Alive");
     header_lists = curl_slist_append(header_lists, "User-Agent: cos-cpp-sdk-v4.2");
 
+    /*
+    review: 尽可能延后变量定义式出现的时间 & 以及避免不成熟的劣化。
+    it， header_key, header_value, fullstr 在循环内定义为宜，一般变量宜定义在能确定其初值所在之处。
+    此外，尽量使用 const 引用，而不是只用对象，编译器并不能保证一定会对其优化，此即，避免不成熟的劣化。
+    for(auto it = user_headers.begin(); it != user_headers.end(), ++it)
+    {
+        const string & header_key = it->first;
+        const string & header_value = it->second;
+        string full_str = header_key + ":" + header_value;
+        header_lists = curl_slist_append(header_lists, full_str.c_str());
+    }
+    */
     std::map<string, string>::const_iterator it = user_headers.begin();
     string header_key, header_value, full_str;
     for (; it != user_headers.end(); ++it) {
@@ -89,7 +106,12 @@ struct curl_slist* HttpSender::SetCurlHeaders(CURL *curl_handler, const std::map
 
 string HttpSender::SendGetRequest(const string url,
                                   const std::map<string, string> &user_headers,
-                                  const std::map<string, string> &user_params) {
+                                  const std::map<string, string> &user_params) 
+{
+    /*
+    review: 尽可能延后变量定义式出现的时间 & 以及避免不成熟的劣化。
+    同上，下面还有很多代码都存在相同的问题，不再重复。
+    */
     string user_params_str = "";
     string param_key = "";
     string param_value = "";
@@ -126,6 +148,13 @@ string HttpSender::SendGetRequest(const string url,
 
     if (ret_code != CURLE_OK) {
         SDK_LOG_ERR("SendGetRequest error! full_url: %s, time_cost: %lu",full_url.c_str(), time_cost_in_us );
+        
+    /*
+    review：关于宏使用的隐忧。
+    宏作为编译器的预处理命令，虽然方便，但并不具有可扩展性。
+    一般而言，只有在极少数情况下使用宏是合理的，典型如头文件保护符。
+    此处用作编译开关，虽然方便，但应该可以用其他更为合理的方法来替代。
+    */
 #ifdef __USE_L5
         int64_t l5_modid = CosSysConfig::getL5Modid();
         int64_t l5_cmdid = CosSysConfig::getL5Cmdid();
@@ -380,6 +409,13 @@ string HttpSender::SendFileParall(const string url,
 
     const unsigned int max_parall_num = 20;
     unsigned char *sliceContentArr[max_parall_num];
+    
+    /*
+    review: RAII 资源获取就是初始化，以对象管理资源，以及为异常安全而努力是值得的。
+    下面的代码并没有遵循上面的原则，直接用new来创建数组，并且使用了指针数组。
+    但在后面的逻辑代码中，有可能“直接抛出异常而函数退出”，导致后面的 delete[] sliceContentArr[i]; 并没有执行，此时则发生了资源泄露。
+    解决办法是使用智能指针shared_ptr保证资源一定能够释放，或者在这里直接使用vector<vector<unsigned char>> 或者 vector<string>
+    */
     for (unsigned int i = 0; i < max_parall_num; ++i) {
         sliceContentArr[i] = new unsigned char[sliceSize];
     }
@@ -518,6 +554,7 @@ string HttpSender::SendFileParall(const string url,
 
 int64_t HttpSender::GetTimeStampInUs() {
     // 构造时间
+    //review: struct 多余，没必要使用 c style。
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return tv.tv_sec * 1000000 + tv.tv_usec;
